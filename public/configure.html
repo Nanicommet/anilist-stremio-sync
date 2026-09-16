@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>AniList Sync — Configure</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 560px; margin: 48px auto; padding: 0 16px; color: #1a1a2e; }
+  h1 { font-size: 1.4rem; }
+  label { display: block; margin-top: 16px; font-weight: 600; font-size: 0.9rem; }
+  input { width: 100%; padding: 10px; margin-top: 6px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
+  button, a.button { display: inline-block; margin-top: 20px; padding: 12px 20px; background: #02a9ff; color: white; border: none; border-radius: 6px; font-size: 1rem; cursor: pointer; text-decoration: none; }
+  button:disabled { background: #aaa; cursor: not-allowed; }
+  #status { margin-top: 16px; font-size: 0.9rem; color: #555; }
+  #install-box { display: none; margin-top: 28px; padding: 16px; background: #f4f6fb; border-radius: 8px; }
+  code { word-break: break-all; }
+  .hint { font-size: 0.85rem; color: #666; }
+</style>
+</head>
+<body>
+
+<h1>Connect your AniList account</h1>
+<p class="hint">
+  This addon needs an AniList API client so it can ask for permission to read/update your list.
+  Create one (once) at
+  <a href="https://anilist.co/settings/developer" target="_blank">anilist.co/settings/developer</a>
+  with redirect URL set to this page's URL, then paste the Client ID below.
+</p>
+
+<label for="clientId">AniList Client ID</label>
+<input id="clientId" placeholder="e.g. 12345" />
+
+<button id="connectBtn">Connect to AniList</button>
+<div id="status"></div>
+
+<div id="install-box">
+  <p>Connected as <strong id="username"></strong>. Your personal install link:</p>
+  <p><code id="manifestUrl"></code></p>
+  <a id="installLink" class="button" href="#">Install in Stremio</a>
+</div>
+
+<script>
+  const params = new URLSearchParams(window.location.hash.replace('#', '?'));
+  const accessToken = params.get('access_token');
+
+  const clientIdInput = document.getElementById('clientId');
+  const connectBtn = document.getElementById('connectBtn');
+  const statusEl = document.getElementById('status');
+  const installBox = document.getElementById('install-box');
+
+  // Remember the client id across the OAuth redirect round-trip.
+  if (localStorage.getItem('anilist_client_id')) {
+    clientIdInput.value = localStorage.getItem('anilist_client_id');
+  }
+
+  connectBtn.addEventListener('click', () => {
+    const clientId = clientIdInput.value.trim();
+    if (!clientId) {
+      statusEl.textContent = 'Enter your AniList Client ID first.';
+      return;
+    }
+    localStorage.setItem('anilist_client_id', clientId);
+    const redirectUri = window.location.origin + window.location.pathname;
+    const authUrl =
+      `https://anilist.co/api/v2/oauth/authorize?client_id=${encodeURIComponent(clientId)}` +
+      `&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token`;
+    window.location.href = authUrl;
+  });
+
+  async function finishSetup(token) {
+    statusEl.textContent = 'Fetching your AniList profile…';
+    const res = await fetch('/api/viewer?token=' + encodeURIComponent(token));
+    if (!res.ok) {
+      statusEl.textContent = 'Could not verify that AniList token. Try connecting again.';
+      return;
+    }
+    const viewer = await res.json();
+    document.getElementById('username').textContent = viewer.name;
+
+    const configRes = await fetch('/api/make-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accessToken: token, userId: viewer.id, username: viewer.name }),
+    });
+    const { config } = await configRes.json();
+
+    const manifestUrl = `${window.location.origin}/${config}/manifest.json`;
+    document.getElementById('manifestUrl').textContent = manifestUrl;
+    document.getElementById('installLink').href = manifestUrl.replace(/^https?:\/\//, 'stremio://');
+    statusEl.textContent = '';
+    installBox.style.display = 'block';
+  }
+
+  if (accessToken) {
+    // Clean the token out of the visible URL, then proceed.
+    window.history.replaceState({}, document.title, window.location.pathname);
+    finishSetup(accessToken);
+  }
+</script>
+</body>
+</html>
