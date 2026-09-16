@@ -1,0 +1,15 @@
+{
+  "name": "anilist-stremio-sync",
+  "version": "0.1.0",
+  "description": "Stremio addon that surfaces your AniList lists as catalogs and pushes watch progress back to AniList.",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "node-fetch": "^2.7.0"
+  }
+}
